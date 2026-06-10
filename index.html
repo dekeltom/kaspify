@@ -8,7 +8,6 @@
 <meta name="apple-mobile-web-app-title" content="כספי">
 <meta name="theme-color" content="#0f0f0f">
 <title>כספי — תום ודנה</title>
-<script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
 <style>
 :root {
@@ -562,6 +561,7 @@ html, body {
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // ─── CATEGORIES ───
 const CATS = [
@@ -607,19 +607,21 @@ async function connectSupabase(){
   const url = document.getElementById('supaUrl').value.trim();
   const key = document.getElementById('supaKey').value.trim();
   if(!url || !key){ toast('⚠️ מלא URL ו-Key'); return; }
-  S.supaUrl = url; S.supaKey = key; save();
 
   try {
     const lib = window.supabase;
-    if(!lib || !lib.createClient){ toast('❌ ספריית Supabase לא נטענה — רענן את הדף'); return; }
+    if(!lib || !lib.createClient){ toast('❌ ספריית Supabase לא נטענה — נסה שוב'); return; }
     supabase = lib.createClient(url, key);
-    // Test connection
     const { data, error } = await supabase.from('transactions').select('id').limit(1);
     if(error) throw error;
+    // Save only after success
+    S.supaUrl = url; S.supaKey = key; save();
     setSyncStatus(true);
     toast('✅ מחובר לענן!');
     await syncFromCloud();
   } catch(e) {
+    supabase = null;
+    S.supaUrl = ''; S.supaKey = ''; save();
     toast('❌ שגיאה: ' + (e.message||'בדוק את הפרטים'));
     setSyncStatus(false);
   }
