@@ -578,13 +578,16 @@ const CATS = [
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
 // ─── STATE ───
+const CLOUD_URL = 'https://dwxrovvieftsbbpjrkmh.supabase.co';
+const CLOUD_KEY = 'sb_publishable_WmczGaLY7E4nMhygqciZ2g_ge3TSLxj';
+
 let S = {
   transactions: [],
   month: new Date().getMonth(),
   year: new Date().getFullYear(),
   budget: 16000,
-  supaUrl: '',
-  supaKey: '',
+  supaUrl: CLOUD_URL,
+  supaKey: CLOUD_KEY,
 };
 let addS = { type:'expense', cat:'food', payer:'tom' };
 let filter = 'all';
@@ -1017,19 +1020,19 @@ if(params.get('add')){
 
 // ─── INIT ───
 load();
+S.supaUrl = CLOUD_URL;
+S.supaKey = CLOUD_KEY;
 updateMonth();
 renderAll();
 
-// Try reconnect on load
-if(S.supaUrl && S.supaKey){
-  setTimeout(()=>{
-    try {
-      document.getElementById('supaUrl').value=S.supaUrl;
-      document.getElementById('supaKey').value=S.supaKey;
-      connectSupabase().catch(()=>{});
-    } catch(e){}
-  },1000);
-}
+// Auto-connect to cloud
+setTimeout(()=>{
+  try {
+    document.getElementById('supaUrl').value = CLOUD_URL;
+    document.getElementById('supaKey').value = CLOUD_KEY;
+    connectSupabase().catch(()=>{});
+  } catch(e){}
+},500);
 </script>
 </body>
 </html>
