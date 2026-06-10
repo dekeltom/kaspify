@@ -561,7 +561,6 @@ html, body {
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // ─── CATEGORIES ───
 const CATS = [
@@ -589,7 +588,7 @@ let S = {
 };
 let addS = { type:'expense', cat:'food', payer:'tom' };
 let filter = 'all';
-let supabase = null;
+let cloudOK = false;
 
 // ─── STORAGE ───
 function save(){ try{ localStorage.setItem('kaspify3',JSON.stringify(S)); }catch(e){} }
@@ -602,58 +601,54 @@ function load(){
   S.year = new Date().getFullYear();
 }
 
-// ─── SUPABASE ───
-async function connectSupabase(){
-  const url = document.getElementById('supaUrl').value.trim();
-  const key = document.getElementById('supaKey').value.trim();
-  if(!url || !key){ toast('⚠️ מלא URL ו-Key'); return; }
+// ─── CLOUD SYNC (direct REST — zero dependencies) ───
+function cloudHeaders(){
+  return { 'apikey': S.supaKey, 'Authorization': 'Bearer '+S.supaKey, 'Content-Type': 'application/json' };
+}
 
+async function connectSupabase(){
+  const url = document.getElementById('supaUrl').value.trim().replace(/\/$/,'');
+  const key = document.getElementById('supaKey').value.trim();
+  if(!url || !key){ toast('⚠️ מלא את שני השדות'); return; }
   try {
-    const lib = window.supabase;
-    if(!lib || !lib.createClient){ toast('❌ ספריית Supabase לא נטענה — נסה שוב'); return; }
-    supabase = lib.createClient(url, key);
-    const { data, error } = await supabase.from('transactions').select('id').limit(1);
-    if(error) throw error;
-    // Save only after success
-    S.supaUrl = url; S.supaKey = key; save();
+    const r = await fetch(url+'/rest/v1/transactions?select=id&limit=1', {
+      headers: { 'apikey': key, 'Authorization': 'Bearer '+key }
+    });
+    if(!r.ok) throw new Error(r.status);
+    S.supaUrl = url; S.supaKey = key; cloudOK = true; save();
     setSyncStatus(true);
     toast('✅ מחובר לענן!');
     await syncFromCloud();
   } catch(e) {
-    supabase = null;
-    S.supaUrl = ''; S.supaKey = ''; save();
-    toast('❌ שגיאה: ' + (e.message||'בדוק את הפרטים'));
+    cloudOK = false; S.supaUrl = ''; S.supaKey = ''; save();
     setSyncStatus(false);
+    toast('❌ בדוק את הפרטים ונסה שוב');
   }
 }
 
-function setSyncStatus(online){
-  document.getElementById('syncDot').className = 'sync-dot ' + (online?'online':'offline');
-  document.getElementById('syncText').textContent = online ? 'מסונכרן בענן — כל המכשירים מחוברים' : 'מצב מקומי — הגדר סנכרון בהגדרות';
+function setSyncStatus(on){
+  document.getElementById('syncDot').className = 'sync-dot '+(on?'online':'offline');
+  document.getElementById('syncText').textContent = on ? 'מסונכרן בענן' : 'מצב מקומי — הגדר סנכרון בהגדרות';
 }
 
 async function syncToCloud(t){
-  if(!supabase) return;
-  try{ await supabase.from('transactions').upsert(t); }catch(e){}
+  if(!cloudOK) return;
+  try{ await fetch(S.supaUrl+'/rest/v1/transactions', {
+    method:'POST', headers:{...cloudHeaders(),'Prefer':'resolution=merge-duplicates'}, body:JSON.stringify(t)
+  }); }catch(e){}
 }
 async function deleteFromCloud(id){
-  if(!supabase) return;
-  try{ await supabase.from('transactions').delete().eq('id', id); }catch(e){}
+  if(!cloudOK) return;
+  try{ await fetch(S.supaUrl+'/rest/v1/transactions?id=eq.'+id, {
+    method:'DELETE', headers:cloudHeaders()
+  }); }catch(e){}
 }
 async function syncFromCloud(){
-  if(!supabase) return;
+  if(!cloudOK) return;
   try{
-    const {data} = await supabase.from('transactions').select('*').order('date',{ascending:false});
-    if(data){ S.transactions = data; save(); renderAll(); }
+    const r = await fetch(S.supaUrl+'/rest/v1/transactions?select=*&order=date.desc', { headers:cloudHeaders() });
+    if(r.ok){ const d = await r.json(); S.transactions = d; save(); renderAll(); }
   }catch(e){}
-}
-
-// Subscribe to realtime changes
-function subscribeRealtime(){
-  if(!supabase) return;
-  supabase.channel('transactions')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, ()=>{ syncFromCloud(); })
-    .subscribe();
 }
 
 // ─── UTILS ───
@@ -1025,17 +1020,15 @@ load();
 updateMonth();
 renderAll();
 
-// Try reconnect Supabase on load
+// Try reconnect on load
 if(S.supaUrl && S.supaKey){
   setTimeout(()=>{
     try {
       document.getElementById('supaUrl').value=S.supaUrl;
       document.getElementById('supaKey').value=S.supaKey;
-      if(window.supabase && window.supabase.createClient){
-        connectSupabase().then(subscribeRealtime).catch(()=>{});
-      }
+      connectSupabase().catch(()=>{});
     } catch(e){}
-  },2000);
+  },1000);
 }
 </script>
 </body>
